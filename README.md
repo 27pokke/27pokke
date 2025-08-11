@@ -1,5 +1,9 @@
 ## Hi there 👋
 
+<!-- WEATHER-START -->
+（天気API実行結果）
+<!-- WEATHER-END -->
+
 <!--
 **27pokke/27pokke** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 
@@ -14,3 +18,5 @@ Here are some ideas to get you started:
 - 😄 Pronouns: ...
 - ⚡ Fun fact: ...
 -->
+
+
