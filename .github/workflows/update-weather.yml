@@ -1,0 +1,107 @@
+name: Update Weather in README
+
+on:
+  schedule:
+    # 07:00 JST
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CITY: ${{ secrets.OPENWEATHER_CITY || 'Tokyo,JP' }}
+  UNITS: metric
+  LANG: ja
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch weather (OpenWeatherMap)
+        id: weather
+        shell: bash
+        env:
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          URL="https://api.openweathermap.org/data/2.5/weather?q=${CITY}&appid=${OPENWEATHER_API_KEY}"
+
+          # 取得
+          RESP="$(curl -sS "${URL}")"
+
+          CODE="$(echo "$RESP" | jq -r '.cod // empty')"
+          if [[ -n "$CODE" && "$CODE" != "200" ]]; then
+            echo "API error: $(echo "$RESP" | jq -r '.message // "unknown error"')"
+            exit 1
+          fi
+
+          NAME="$(echo "$RESP" | jq -r '.name')"
+          DESC="$(echo "$RESP" | jq -r '.weather[0].description')"
+          TEMP="$(echo "$RESP" | jq -r '.main.temp | floor')"
+          FEELS="$(echo "$RESP" | jq -r '.main.feels_like | floor')"
+          HUMI="$(echo "$RESP" | jq -r '.main.humidity')"
+          WIND="$(echo "$RESP" | jq -r '.wind.speed')"
+          ICON="$(echo "$RESP" | jq -r '.weather[0].icon')"
+          TIME="$(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST')"
+
+          EMOJI="⛅"
+          case "$ICON" in
+            01*) EMOJI="☀️" ;; # clear
+            02*) EMOJI="🌤️" ;;
+            03*|04*) EMOJI="☁️" ;;
+            09*|10*) EMOJI="🌧️" ;;
+            11*) EMOJI="⛈️" ;;
+            13*) EMOJI="❄️" ;;
+            50*) EMOJI="🌫️" ;;
+          esac
+
+          SUMMARY=$(cat <<'EOF'
+          **{CITY_NAME} の天気** {EMOJI}  
+          - 概況: {DESC}  
+          - 気温: {TEMP}℃（体感 {FEELS}℃）  
+          - 湿度: {HUMI}% / 風速: {WIND} m/s  
+          - 更新: {TIME}
+          EOF
+          )
+
+          SUMMARY="${SUMMARY//\{CITY_NAME\}/$NAME}"
+          SUMMARY="${SUMMARY//\{EMOJI\}/$EMOJI}"
+          SUMMARY="${SUMMARY//\{DESC\}/$DESC}"
+          SUMMARY="${SUMMARY//\{TEMP\}/$TEMP}"
+          SUMMARY="${SUMMARY//\{FEELS\}/$FEELS}"
+          SUMMARY="${SUMMARY//\{HUMI\}/$HUMI}"
+          SUMMARY="${SUMMARY//\{WIND\}/$WIND}"
+          SUMMARY="${SUMMARY//\{TIME\}/$TIME}"
+
+          awk -v RS= -v ORS= '
+            {
+              gsub(/<!-- WEATHER-START -->.*<!-- WEATHER-END -->/,
+                   "<!-- WEATHER-START -->\n" ENVIRON["SUMMARY"] "\n<!-- WEATHER-END -->")
+              print
+            }
+          ' README.md > README.tmp && mv README.tmp README.md
+
+          echo "city=${NAME}" >> $GITHUB_OUTPUT
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Commit changes if needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "chore: update weather for ${{ steps.weather.outputs.city }}"
+          git push
