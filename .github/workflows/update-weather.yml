@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          URL="https://api.openweathermap.org/data/2.5/weather?q=${CITY}&appid=${OPENWEATHER_API_KEY}"
+          URL="https://api.openweathermap.org/data/2.5/weather?q=${CITY}&appid=${OPENWEATHER_API_KEY}&units=${UNITS}&lang=${LANG}"
 
           # 取得
           RESP="$(curl -sS "${URL}")"
@@ -78,13 +78,19 @@ jobs:
           SUMMARY="${SUMMARY//\{WIND\}/$WIND}"
           SUMMARY="${SUMMARY//\{TIME\}/$TIME}"
 
-          awk -v RS= -v ORS= '
-            {
-              gsub(/<!-- WEATHER-START -->.*<!-- WEATHER-END -->/,
-                   "<!-- WEATHER-START -->\n" ENVIRON["SUMMARY"] "\n<!-- WEATHER-END -->")
-              print
-            }
-          ' README.md > README.tmp && mv README.tmp README.md
+          export SUMMARY
+          python3 - <<'PYEOF'
+import os, re
+summary = os.environ['SUMMARY']
+content = open('README.md').read()
+new_content = re.sub(
+    r'<!-- WEATHER-START -->.*?<!-- WEATHER-END -->',
+    '<!-- WEATHER-START -->\n' + summary + '\n<!-- WEATHER-END -->',
+    content,
+    flags=re.DOTALL
+)
+open('README.md', 'w').write(new_content)
+PYEOF
 
           echo "city=${NAME}" >> $GITHUB_OUTPUT
           echo "summary<<EOF" >> $GITHUB_OUTPUT
