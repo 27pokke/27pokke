@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 env:
-  CITY: ${{ secrets.OPENWEATHER_CITY || 'Tokyo,JP' }}
+  CITY: "${{ secrets.OPENWEATHER_CITY || 'Tokyo,JP' }}"
   UNITS: metric
   LANG: ja
 
