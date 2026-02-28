@@ -12,7 +12,7 @@ permissions:
 env:
   CITY: "${{ secrets.OPENWEATHER_CITY || 'Tokyo,JP' }}"
   UNITS: metric
-  LANG: ja
+  OWM_LANG: ja
 
 jobs:
   update:
@@ -25,11 +25,11 @@ jobs:
         id: weather
         shell: bash
         env:
-          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          OPENWEATHER_API_KEY: "${{ secrets.OPENWEATHER_API_KEY }}"
         run: |
           set -euo pipefail
 
-          URL="https://api.openweathermap.org/data/2.5/weather?q=${CITY}&appid=${OPENWEATHER_API_KEY}&units=${UNITS}&lang=${LANG}"
+          URL="https://api.openweathermap.org/data/2.5/weather?q=${CITY}&appid=${OPENWEATHER_API_KEY}&units=${UNITS}&lang=${OWM_LANG}"
 
           # 取得
           RESP="$(curl -sS "${URL}")"
@@ -83,10 +83,10 @@ jobs:
           sed -n '/<!-- WEATHER-END -->/,$p' README.md > /tmp/part2.txt
           { cat /tmp/part1.txt; printf '%s\n' "$SUMMARY"; cat /tmp/part2.txt; } > README.md
 
-          echo "city=${NAME}" >> $GITHUB_OUTPUT
-          echo "summary<<EOF" >> $GITHUB_OUTPUT
-          echo "$SUMMARY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "city=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "summary<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$SUMMARY" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Commit changes if needed
         shell: bash
