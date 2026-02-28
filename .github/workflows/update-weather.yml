@@ -78,19 +78,10 @@ jobs:
           SUMMARY="${SUMMARY//\{WIND\}/$WIND}"
           SUMMARY="${SUMMARY//\{TIME\}/$TIME}"
 
-          export SUMMARY
-          python3 - <<'PYEOF'
-import os, re
-summary = os.environ['SUMMARY']
-content = open('README.md').read()
-new_content = re.sub(
-    r'<!-- WEATHER-START -->.*?<!-- WEATHER-END -->',
-    '<!-- WEATHER-START -->\n' + summary + '\n<!-- WEATHER-END -->',
-    content,
-    flags=re.DOTALL
-)
-open('README.md', 'w').write(new_content)
-PYEOF
+          # README.md の天気セクションを更新
+          sed -n '1,/<!-- WEATHER-START -->/p' README.md > /tmp/part1.txt
+          sed -n '/<!-- WEATHER-END -->/,$p' README.md > /tmp/part2.txt
+          { cat /tmp/part1.txt; printf '%s\n' "$SUMMARY"; cat /tmp/part2.txt; } > README.md
 
           echo "city=${NAME}" >> $GITHUB_OUTPUT
           echo "summary<<EOF" >> $GITHUB_OUTPUT
