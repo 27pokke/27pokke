@@ -1,5 +1,7 @@
 ## Hi there 👋
 
+[![Update Weather in README](https://github.com/27pokke/27pokke/actions/workflows/update-weather.yml/badge.svg)](https://github.com/27pokke/27pokke/actions/workflows/update-weather.yml)
+
 <!-- WEATHER-START -->
 **東京都 の天気** 🌤️  
 - 概況: 薄い雲  
