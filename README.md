@@ -3,11 +3,11 @@
 [![Update Weather in README](https://github.com/27pokke/27pokke/actions/workflows/update-weather.yml/badge.svg)](https://github.com/27pokke/27pokke/actions/workflows/update-weather.yml)
 
 <!-- WEATHER-START -->
-**東京都 の天気** ☁️  
-- 概況: 曇りがち  
-- 気温: 18℃（体感 18℃）  
-- 湿度: 84% / 風速: 4.12 m/s  
-- 更新: 2026-10-27 10:00 JST
+**東京都 の天気** 🌤️  
+- 概況: 薄い雲  
+- 気温: 18℃（体感 17℃）  
+- 湿度: 43% / 風速: 10.8 m/s  
+- 更新: 2026-10-28 09:49 JST
 <!-- WEATHER-END -->
 
 <!--
