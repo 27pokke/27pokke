@@ -6,6 +6,10 @@ on:
     - cron: '0 22 * * *'
   workflow_dispatch:
 
+concurrency:
+  group: update-weather-readme
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -17,37 +21,67 @@ env:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Fetch weather (OpenWeatherMap)
-        id: weather
         shell: bash
         env:
           OPENWEATHER_API_KEY: "${{ secrets.OPENWEATHER_API_KEY }}"
         run: |
           set -euo pipefail
 
-          URL="https://api.openweathermap.org/data/2.5/weather?q=${CITY}&appid=${OPENWEATHER_API_KEY}&units=${UNITS}&lang=${OWM_LANG}"
-
-          # 取得
-          RESP="$(curl -sS "${URL}")"
-
-          CODE="$(echo "$RESP" | jq -r '.cod // empty')"
-          if [[ -n "$CODE" && "$CODE" != "200" ]]; then
-            echo "API error: $(echo "$RESP" | jq -r '.message // "unknown error"')"
+          if [[ -z "${OPENWEATHER_API_KEY:-}" ]]; then
+            echo "::error title=Missing secret::Repository secret OPENWEATHER_API_KEY is not configured."
             exit 1
           fi
 
-          NAME="$(echo "$RESP" | jq -r '.name')"
-          DESC="$(echo "$RESP" | jq -r '.weather[0].description')"
-          TEMP="$(echo "$RESP" | jq -r '.main.temp | floor')"
-          FEELS="$(echo "$RESP" | jq -r '.main.feels_like | floor')"
-          HUMI="$(echo "$RESP" | jq -r '.main.humidity')"
-          WIND="$(echo "$RESP" | jq -r '.wind.speed')"
-          ICON="$(echo "$RESP" | jq -r '.weather[0].icon')"
-          TIME="$(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST')"
+          if ! RESP="$(
+            curl \
+              --fail-with-body \
+              --silent \
+              --show-error \
+              --retry 3 \
+              --retry-delay 2 \
+              --retry-max-time 20 \
+              --connect-timeout 10 \
+              --max-time 30 \
+              --get "https://api.openweathermap.org/data/2.5/weather" \
+              --data-urlencode "q=${CITY}" \
+              --data-urlencode "appid=${OPENWEATHER_API_KEY}" \
+              --data-urlencode "units=${UNITS}" \
+              --data-urlencode "lang=${OWM_LANG}"
+          )"; then
+            MESSAGE="$(jq -r '.message // empty' <<<"${RESP}" 2>/dev/null || true)"
+            echo "::error title=Weather API request failed::OpenWeatherMap did not return a successful response."
+            if [[ -n "${MESSAGE}" ]]; then
+              MESSAGE="${MESSAGE//$'\r'/ }"
+              MESSAGE="${MESSAGE//$'\n'/ }"
+              printf 'OpenWeatherMap message: %s\n' "${MESSAGE}"
+            fi
+            exit 1
+          fi
+
+          if ! jq -e 'type == "object"' >/dev/null <<<"${RESP}"; then
+            echo "::error title=Invalid API response::OpenWeatherMap returned invalid JSON."
+            exit 1
+          fi
+
+          CODE="$(jq -r '.cod // 200' <<<"${RESP}")"
+          if [[ -n "$CODE" && "$CODE" != "200" ]]; then
+            echo "::error title=Weather API error::OpenWeatherMap returned an API error."
+            exit 1
+          fi
+
+          NAME="$(jq -er '.name' <<<"${RESP}")"
+          DESC="$(jq -er '.weather[0].description' <<<"${RESP}")"
+          TEMP="$(jq -er '.main.temp | floor' <<<"${RESP}")"
+          FEELS="$(jq -er '.main.feels_like | floor' <<<"${RESP}")"
+          HUMI="$(jq -er '.main.humidity' <<<"${RESP}")"
+          WIND="$(jq -er '.wind.speed' <<<"${RESP}")"
+          ICON="$(jq -er '.weather[0].icon' <<<"${RESP}")"
 
           EMOJI="⛅"
           case "$ICON" in
@@ -61,11 +95,11 @@ jobs:
           esac
 
           SUMMARY=$(cat <<'EOF'
-          **{CITY_NAME} の天気** {EMOJI}  
-          - 概況: {DESC}  
-          - 気温: {TEMP}℃（体感 {FEELS}℃）  
-          - 湿度: {HUMI}% / 風速: {WIND} m/s  
-          - 更新: {TIME}
+          **{CITY_NAME} の天気** {EMOJI}
+
+          - 概況: {DESC}
+          - 気温: {TEMP}℃（体感 {FEELS}℃）
+          - 湿度: {HUMI}% / 風速: {WIND} m/s
           EOF
           )
 
@@ -76,29 +110,29 @@ jobs:
           SUMMARY="${SUMMARY//\{FEELS\}/$FEELS}"
           SUMMARY="${SUMMARY//\{HUMI\}/$HUMI}"
           SUMMARY="${SUMMARY//\{WIND\}/$WIND}"
-          SUMMARY="${SUMMARY//\{TIME\}/$TIME}"
 
-          # README.md の天気セクションを更新
+          START_COUNT="$(grep -c '<!-- WEATHER-START -->' README.md || true)"
+          END_COUNT="$(grep -c '<!-- WEATHER-END -->' README.md || true)"
+          if [[ "${START_COUNT}" -ne 1 || "${END_COUNT}" -ne 1 ]]; then
+            echo "::error title=Invalid README::Weather section markers must each appear exactly once."
+            exit 1
+          fi
+
           sed -n '1,/<!-- WEATHER-START -->/p' README.md > /tmp/part1.txt
           sed -n '/<!-- WEATHER-END -->/,$p' README.md > /tmp/part2.txt
           { cat /tmp/part1.txt; printf '%s\n' "$SUMMARY"; cat /tmp/part2.txt; } > README.md
-
-          echo "city=${NAME}" >> "$GITHUB_OUTPUT"
-          echo "summary<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$SUMMARY" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Commit changes if needed
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet; then
+          if git diff --quiet -- README.md; then
             echo "No changes."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git commit -m "chore: update weather for ${{ steps.weather.outputs.city }}"
+          git add -- README.md
+          git commit -m "chore: update weather"
           git push
